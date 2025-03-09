@@ -59,25 +59,17 @@ public class UserService implements IUserService {
         User existingUser = userRepository.findById(user.getId())
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        // עדכון פרטים בסיסיים
         existingUser.setFirstName(user.getFirstName());
         existingUser.setLastName(user.getLastName());
         existingUser.setEmail(user.getEmail());
 
-        // עדכון תפקיד רק אם המשתמש שלח תפקיד חדש
         if (user.getRole() != null) {
             existingUser.setRole(user.getRole());
         }
 
-        // עדכון סיסמה רק אם המשתמש שלח סיסמה חדשה
-        if (user.getPassword() != null && !user.getPassword().isEmpty()) {
-            // פשוט הצפן את הסיסמה החדשה ועדכן אותה
-            existingUser.setPassword(passwordEncoder.encode(user.getPassword()));
-        }
-        // אם המשתמש לא שלח סיסמה, השאר את הסיסמה הקיימת
-
         return userRepository.save(existingUser);
     }
+
 
 
 

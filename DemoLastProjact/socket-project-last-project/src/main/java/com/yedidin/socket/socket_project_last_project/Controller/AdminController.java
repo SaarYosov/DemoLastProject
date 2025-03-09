@@ -49,42 +49,35 @@ public class AdminController {
     }
 
     // עדכון משתמש
-    @PutMapping("/users/{userId}")
-    public ResponseEntity<?> updateUser(@PathVariable Long userId, @RequestBody Map<String, String> updates) {
-        User user = userService.getUserById(userId);
+    @PutMapping("users/{id}")
+    public ResponseEntity<?> updateUser(@RequestBody User updatedUser, @PathVariable Long id) {
+        try {
+            User currentUser = userService.getUserById(id);
 
-        if (updates.containsKey("firstName")) {
-            user.setFirstName(updates.get("firstName"));
-        }
-        if (updates.containsKey("lastName")) {
-            user.setLastName(updates.get("lastName"));
-        }
-        if (updates.containsKey("email")) {
-            user.setEmail(updates.get("email"));
-        }
+            // עדכון כל הפרטים
+            currentUser.setFirstName(updatedUser.getFirstName());
+            currentUser.setLastName(updatedUser.getLastName());
+            currentUser.setEmail(updatedUser.getEmail());
 
-        // ✅ בדיקה אם צריך לעדכן סיסמה
-        if (updates.containsKey("currentPassword") && updates.containsKey("password")) {
-            String currentPassword = updates.get("currentPassword");
-            String newPassword = updates.get("password");
-
-            // בדיקה אם הסיסמה הישנה נכונה
-            if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("סיסמה נוכחית שגויה!");
+            // אם יש תפקיד חדש, מעדכן אותו
+            if (updatedUser.getRole() != null) {
+                currentUser.setRole(updatedUser.getRole());
             }
 
-            // קידוד ושמירה של הסיסמה החדשה
-            user.setPassword(passwordEncoder.encode(newPassword));
-        }
+            // אם המשתמש שלח סיסמה חדשה, עדכון עם הצפנה
+            if (updatedUser.getPassword() != null && !updatedUser.getPassword().isEmpty()) {
+                if (!passwordEncoder.matches(updatedUser.getPassword(), currentUser.getPassword())) {
+                    currentUser.setPassword(passwordEncoder.encode(updatedUser.getPassword()));
+                }
+            }
 
-        if (updates.containsKey("roleId")) {
-            Role role = roleRepository.findById(Long.parseLong(updates.get("roleId")))
-                    .orElseThrow(() -> new RuntimeException("התפקיד לא נמצא"));
-            user.setRole(role);
-        }
+            // שמירת העדכון
+            userService.updateUser(currentUser);
+            return ResponseEntity.ok("User updated successfully");
 
-        userService.updateUser(user);
-        return ResponseEntity.ok("המשתמש עודכן בהצלחה");
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("User not found");
+        }
     }
 
 

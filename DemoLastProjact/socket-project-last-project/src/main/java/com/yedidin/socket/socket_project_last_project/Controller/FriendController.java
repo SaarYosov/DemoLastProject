@@ -1,15 +1,21 @@
 package com.yedidin.socket.socket_project_last_project.Controller;
 
+import com.yedidin.socket.socket_project_last_project.DTO.EventRequest;
 import com.yedidin.socket.socket_project_last_project.Entity.Event;
 import com.yedidin.socket.socket_project_last_project.Entity.User;
+import com.yedidin.socket.socket_project_last_project.Repository.UserRepository;
 import com.yedidin.socket.socket_project_last_project.Service.EventService;
 import com.yedidin.socket.socket_project_last_project.Service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -21,10 +27,14 @@ public class FriendController {
 
     private final EventService eventService;
     private final UserService userService;
-
-    public FriendController(EventService eventService, UserService userService) {
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
+    @Autowired
+    public FriendController(EventService eventService, UserService userService, UserRepository userRepository, PasswordEncoder passwordEncoder) {
         this.eventService = eventService;
         this.userService = userService;
+        this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     // קבלת פרטי המשתמש המחובר
@@ -72,25 +82,33 @@ public class FriendController {
 
     @PutMapping("/{id}")
     public ResponseEntity<?> updateUser(@RequestBody User updatedUser, @PathVariable Long id) {
-        User currentUser = userService.getUserById(id);
+        try {
+            User currentUser = userService.getUserById(id);
 
-        currentUser.setFirstName(updatedUser.getFirstName());
-        currentUser.setLastName(updatedUser.getLastName());
-        currentUser.setEmail(updatedUser.getEmail());
+            // עדכון כל הפרטים
+            currentUser.setFirstName(updatedUser.getFirstName());
+            currentUser.setLastName(updatedUser.getLastName());
+            currentUser.setEmail(updatedUser.getEmail());
 
-        // אם יש תפקיד חדש, מעדכן אותו
-        if (updatedUser.getRole() != null) {
-            currentUser.setRole(updatedUser.getRole());
+            // אם יש תפקיד חדש, מעדכן אותו
+            if (updatedUser.getRole() != null) {
+                currentUser.setRole(updatedUser.getRole());
+            }
+
+            // אם המשתמש שלח סיסמה חדשה, עדכון עם הצפנה
+            if (updatedUser.getPassword() != null && !updatedUser.getPassword().isEmpty()) {
+                if (!passwordEncoder.matches(updatedUser.getPassword(), currentUser.getPassword())) {
+                    currentUser.setPassword(passwordEncoder.encode(updatedUser.getPassword()));
+                }
+            }
+
+            // שמירת העדכון
+            userService.updateUser(currentUser);
+            return ResponseEntity.ok("User updated successfully");
+
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("User not found");
         }
-
-        // אם המשתמש שינה את הסיסמה, יש לקודד אותה
-        if (updatedUser.getPassword() != null && !updatedUser.getPassword().isEmpty()) {
-            currentUser.setPassword(updatedUser.getPassword());
-        }
-
-        // שמירת העדכון
-        userService.updateUser(currentUser);
-        return ResponseEntity.ok("User updated successfully");
     }
     // עדכון סטטוס של אירוע
     @PatchMapping("/events/{eventId}/status")
@@ -175,5 +193,43 @@ public class FriendController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("שגיאה בשיוך האירוע: " + e.getMessage());
         }
+    }
+
+
+
+
+        @PatchMapping("/{eventId}")
+        public ResponseEntity<?> assignFriendToEvent(@PathVariable Long eventId, @RequestBody Map<String, Long> request) {
+            try {
+                Long friendId = request.get("friendId");
+                eventService.assignFriendToEvent(eventId, friendId);
+                return ResponseEntity.ok("Friend assigned successfully to event");
+            } catch (RuntimeException e) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Event or friend not found");
+            }
+        }
+
+
+    @PostMapping("/events")
+    public ResponseEntity<?> createEvent(@RequestBody EventRequest eventRequest) {
+        // Get logged-in user from JWT
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String email = authentication.getName();
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // Create new event
+        Event event = new Event();
+        event.setUser(user);
+        event.setLatitude(eventRequest.getLatitude());
+        event.setLongitude(eventRequest.getLongitude());
+        event.setEventDescription(eventRequest.getEventDescription());
+        event.setPriority(eventRequest.getPriority());
+        event.setDate(LocalDateTime.now()); // Set current time
+
+        // Save event
+        Event savedEvent = eventService.createEvent(event);
+
+        return ResponseEntity.ok(savedEvent);
     }
 }

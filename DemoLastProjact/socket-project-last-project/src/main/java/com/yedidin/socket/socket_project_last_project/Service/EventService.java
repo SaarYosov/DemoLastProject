@@ -4,6 +4,7 @@ import com.yedidin.socket.socket_project_last_project.Entity.Event;
 import com.yedidin.socket.socket_project_last_project.Entity.User;
 import com.yedidin.socket.socket_project_last_project.Repository.EventRepository;
 import com.yedidin.socket.socket_project_last_project.Repository.UserRepository;
+import jakarta.transaction.Transactional;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
@@ -40,7 +41,17 @@ public class EventService implements IEventService {
         }).orElseThrow(() -> new RuntimeException("Event not found with id: " + id));
     }
 
+    @Transactional
+    public void assignFriendToEvent(Long eventId, Long friendId) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new RuntimeException("Event not found"));
 
+        User friend = userRepository.findById(friendId)
+                .orElseThrow(() -> new RuntimeException("Friend not found"));
+
+        event.setFriend(friend);
+        eventRepository.save(event);
+    }
     @Override
     public void deleteEvent(long eventId) {
         if (!eventRepository.existsById(eventId)) {

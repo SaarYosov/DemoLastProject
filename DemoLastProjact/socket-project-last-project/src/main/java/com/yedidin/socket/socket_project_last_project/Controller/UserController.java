@@ -15,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -37,7 +38,8 @@ public class UserController {
     private EventService eventService;
     @Autowired
     private UserRepository userRepository;
-
+@Autowired
+    private PasswordEncoder passwordEncoder;
     @GetMapping("/me")
     public ResponseEntity<?> getUserProfile() {
         User currentUser = userService.getCurrentUser();
@@ -65,28 +67,35 @@ public ResponseEntity<?> getUser(@PathVariable Long userId) {
     return ResponseEntity.ok(loggedInUser);
 }
 
-
     @PutMapping("/{id}")
     public ResponseEntity<?> updateUser(@RequestBody User updatedUser, @PathVariable Long id) {
-        User currentUser = userService.getUserById(id);
+        try {
+            User currentUser = userService.getUserById(id);
 
-        currentUser.setFirstName(updatedUser.getFirstName());
-        currentUser.setLastName(updatedUser.getLastName());
-        currentUser.setEmail(updatedUser.getEmail());
+            // עדכון כל הפרטים
+            currentUser.setFirstName(updatedUser.getFirstName());
+            currentUser.setLastName(updatedUser.getLastName());
+            currentUser.setEmail(updatedUser.getEmail());
 
-        // אם יש תפקיד חדש, מעדכן אותו
-        if (updatedUser.getRole() != null) {
-            currentUser.setRole(updatedUser.getRole());
+            // אם יש תפקיד חדש, מעדכן אותו
+            if (updatedUser.getRole() != null) {
+                currentUser.setRole(updatedUser.getRole());
+            }
+
+            // אם המשתמש שלח סיסמה חדשה, עדכון עם הצפנה
+            if (updatedUser.getPassword() != null && !updatedUser.getPassword().isEmpty()) {
+                if (!passwordEncoder.matches(updatedUser.getPassword(), currentUser.getPassword())) {
+                    currentUser.setPassword(passwordEncoder.encode(updatedUser.getPassword()));
+                }
+            }
+
+            // שמירת העדכון
+            userService.updateUser(currentUser);
+            return ResponseEntity.ok("User updated successfully");
+
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("User not found");
         }
-
-        // אם המשתמש שינה את הסיסמה, יש לקודד אותה
-        if (updatedUser.getPassword() != null && !updatedUser.getPassword().isEmpty()) {
-            currentUser.setPassword(updatedUser.getPassword());
-        }
-
-        // שמירת העדכון
-        userService.updateUser(currentUser);
-        return ResponseEntity.ok("User updated successfully");
     }
 
 
